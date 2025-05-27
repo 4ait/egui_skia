@@ -1,6 +1,6 @@
 [package]
 name = "egui_skia"
-version = "0.4.99"
+version = "0.4.991"
 edition = "2021"
 description = "egui_skia is a skia integration for the egui ui library. Render egui within a skia application or render skia in a egui application."
 license = "MIT"
@@ -21,6 +21,6 @@ opt-level = 3
 
 [dependencies]
 
-egui = ">=0.20"
+egui = ">=0.31.1"
 skia-safe = { version = ">=0.82.0", features = [] }
 

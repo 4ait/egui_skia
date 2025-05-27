@@ -1,6 +1,5 @@
-use std::time::Duration;
-
-use egui::{Context, Pos2};
+use egui::{Context, Pos2, ViewportId, ViewportInfo};
+use egui::viewport::ViewportIdMap;
 use skia_safe::{surfaces, Canvas, Surface};
 
 use crate::painter::Painter;
@@ -42,17 +41,24 @@ pub fn draw_onto_surface(
     } = options.unwrap_or_default();
     let mut backend = EguiSkia::new();
 
+    // Create viewport info with pixels_per_point
+    let viewport_id = ViewportId::ROOT;
+    let mut viewport_info = ViewportInfo::default();
+    viewport_info.inner_rect = Some([
+        Pos2::default(),
+        Pos2::new(surface.width() as f32, surface.height() as f32),
+    ].into());
+
+    let mut viewports = ViewportIdMap::default();
+    viewports.insert(viewport_id, viewport_info);
+
     let input = egui::RawInput {
-        screen_rect: Some(
-            [
-                Pos2::default(),
-                Pos2::new(surface.width() as f32, surface.height() as f32),
-            ]
-                .into(),
-        ),
-        pixels_per_point: Some(pixels_per_point),
+        viewports,
         ..Default::default()
     };
+
+    // Set pixels_per_point on the context
+    backend.egui_ctx.set_pixels_per_point(pixels_per_point);
 
     for _ in 0..frames_before_screenshot {
         backend.run(input.clone(), &mut ui);
@@ -80,32 +86,33 @@ impl EguiSkia {
         }
     }
 
-    /// Returns a duration after witch egui should repaint.
+    /// Run egui and return the platform output.
     ///
     /// Call [`Self::paint`] later to paint.
     pub fn run(
         &mut self,
         input: egui::RawInput,
         run_ui: impl FnMut(&Context),
-    ) -> (Duration, egui::PlatformOutput) {
+    ) -> egui::PlatformOutput {
         let egui::FullOutput {
             platform_output,
             textures_delta,
             shapes,
-            repaint_after,
+            pixels_per_point: _,
+            viewport_output: _,
         } = self.egui_ctx.run(input, run_ui);
 
         self.shapes = shapes;
         self.textures_delta.append(textures_delta);
 
-        (repaint_after, platform_output)
+        platform_output
     }
 
     /// Paint the results of the last call to [`Self::run`].
     pub fn paint(&mut self, canvas: &Canvas) {
         let shapes = std::mem::take(&mut self.shapes);
         let textures_delta = std::mem::take(&mut self.textures_delta);
-        let clipped_primitives = self.egui_ctx.tessellate(shapes);
+        let clipped_primitives = self.egui_ctx.tessellate(shapes, self.egui_ctx.pixels_per_point());
         self.painter.paint_and_update_textures(
             canvas,
             self.egui_ctx.pixels_per_point(),
