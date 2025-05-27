@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use egui::{Context, Pos2};
-use skia_safe::{Canvas, Surface};
+use skia_safe::{surfaces, Canvas, Surface};
 
 use crate::painter::Painter;
 
@@ -26,7 +26,7 @@ pub fn rasterize(
     ui: impl FnMut(&Context),
     options: Option<RasterizeOptions>,
 ) -> Surface {
-    let mut surface = Surface::new_raster_n32_premul(size).expect("Failed to create surface");
+    let mut surface = surfaces::raster_n32_premul(size).expect("Failed to create surface");
     draw_onto_surface(&mut surface, ui, options);
     surface
 }

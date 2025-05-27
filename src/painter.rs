@@ -7,10 +7,7 @@ use egui::epaint::Mesh16;
 use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData, Pos2, TextureId, TexturesDelta};
 use skia_safe::vertices::VertexMode;
-use skia_safe::{
-    scalar, BlendMode, Canvas, ClipOp, Color, ConditionallySend, Data, Drawable, Image, ImageInfo,
-    Paint, PictureRecorder, Point, Rect, Sendable, Surface, Vertices,
-};
+use skia_safe::{images, scalar, surfaces, BlendMode, Canvas, ClipOp, Color, ConditionallySend, Data, Drawable, Image, ImageInfo, Paint, PictureRecorder, Point, Rect, Sendable, Vertices};
 
 #[derive(Eq, PartialEq)]
 enum PaintType {
@@ -49,7 +46,7 @@ impl Painter {
     ) {
         textures_delta.set.iter().for_each(|(id, image_delta)| {
             let delta_image = match &image_delta.image {
-                ImageData::Color(color_image) => Image::from_raster_data(
+                ImageData::Color(color_image) => images::raster_from_data(
                     &ImageInfo::new_n32_premul(
                         skia_safe::ISize::new(
                             color_image.width() as i32,
@@ -70,7 +67,8 @@ impl Painter {
                     .unwrap(),
                 ImageData::Font(font) => {
                     let pixels = font.srgba_pixels(Some(1.0));
-                    Image::from_raster_data(
+
+                    images::raster_from_data(
                         &ImageInfo::new_n32_premul(
                             skia_safe::ISize::new(font.width() as i32, font.height() as i32),
                             None,
@@ -92,7 +90,7 @@ impl Painter {
                 Some(pos) => {
                     let old_image = self.paints.remove(id).unwrap().image;
 
-                    let mut surface = Surface::new_raster_n32_premul(skia_safe::ISize::new(
+                    let mut surface = surfaces::raster_n32_premul(skia_safe::ISize::new(
                         old_image.width() as i32,
                         old_image.height() as i32,
                     ))
@@ -303,7 +301,7 @@ impl Painter {
                         rect.max.y * dpi,
                     );
 
-                    let mut drawable: Drawable = callback.callback.deref()(skia_rect).0.unwrap();
+                    let mut drawable: Drawable = callback.callback.deref()(skia_rect).0.into_inner();
 
                     let mut arc = skia_safe::AutoCanvasRestore::guard(canvas, true);
 
