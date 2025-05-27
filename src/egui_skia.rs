@@ -48,7 +48,7 @@ pub fn draw_onto_surface(
                 Pos2::default(),
                 Pos2::new(surface.width() as f32, surface.height() as f32),
             ]
-            .into(),
+                .into(),
         ),
         pixels_per_point: Some(pixels_per_point),
         ..Default::default()
@@ -102,7 +102,7 @@ impl EguiSkia {
     }
 
     /// Paint the results of the last call to [`Self::run`].
-    pub fn paint(&mut self, canvas: &mut Canvas) {
+    pub fn paint(&mut self, canvas: &Canvas) {
         let shapes = std::mem::take(&mut self.shapes);
         let textures_delta = std::mem::take(&mut self.textures_delta);
         let clipped_primitives = self.egui_ctx.tessellate(shapes);

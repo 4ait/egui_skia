@@ -42,7 +42,7 @@ impl Painter {
 
     pub fn paint_and_update_textures(
         &mut self,
-        canvas: &mut Canvas,
+        canvas: &Canvas,
         dpi: f32,
         primitives: Vec<ClippedPrimitive>,
         textures_delta: TexturesDelta,
@@ -67,7 +67,7 @@ impl Painter {
                     ),
                     color_image.width() * 4,
                 )
-                .unwrap(),
+                    .unwrap(),
                 ImageData::Font(font) => {
                     let pixels = font.srgba_pixels(Some(1.0));
                     Image::from_raster_data(
@@ -83,7 +83,7 @@ impl Painter {
                         ),
                         font.width() * 4,
                     )
-                    .unwrap()
+                        .unwrap()
                 }
             };
 
@@ -96,7 +96,7 @@ impl Painter {
                         old_image.width() as i32,
                         old_image.height() as i32,
                     ))
-                    .unwrap();
+                        .unwrap();
 
                     let canvas = surface.canvas();
 
@@ -177,7 +177,7 @@ impl Painter {
             match primitive.primitive {
                 Primitive::Mesh(mesh) => {
                     canvas.set_matrix(skia_safe::M44::new_identity().set_scale(dpi, dpi, 1.0));
-                    let mut arc = skia_safe::AutoCanvasRestore::guard(canvas, true);
+                    let arc = skia_safe::AutoCanvasRestore::guard(canvas, true);
 
                     #[cfg(feature = "cpu_fix")]
                     let meshes = mesh
@@ -273,7 +273,7 @@ impl Painter {
 
                         let cpu_fix = if cfg!(feature = "cpu_fix")
                             && self.paints.get(&mesh.texture_id).unwrap().paint_type
-                                == PaintType::Font
+                            == PaintType::Font
                         {
                             !texs
                                 .first()
@@ -370,7 +370,7 @@ pub struct EguiSkiaPaintCallback {
 }
 
 impl EguiSkiaPaintCallback {
-    pub fn new<F: Fn(&mut Canvas) + Send + Sync + 'static>(callback: F) -> EguiSkiaPaintCallback {
+    pub fn new<F: Fn(&Canvas) + Send + Sync + 'static>(callback: F) -> EguiSkiaPaintCallback {
         EguiSkiaPaintCallback {
             callback: Box::new(move |rect| {
                 let mut pr = PictureRecorder::new();
