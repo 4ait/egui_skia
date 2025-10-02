@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "egui_skia"
-version = "0.4.991"
+version = "0.4.992"
 dependencies = [
  "egui",
  "skia-safe",
