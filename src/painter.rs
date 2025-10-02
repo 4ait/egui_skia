@@ -5,9 +5,12 @@ use egui::epaint::ahash::AHashMap;
 #[cfg(feature = "cpu_fix")]
 use egui::epaint::Mesh16;
 use egui::epaint::Primitive;
-use egui::{ClippedPrimitive, ImageData, Pos2, TextureId, TexturesDelta};
+use egui::{ClippedPrimitive, Pos2, TextureId, TexturesDelta};
 use skia_safe::vertices::VertexMode;
-use skia_safe::{images, scalar, surfaces, BlendMode, Canvas, ClipOp, Color, ConditionallySend, Data, Drawable, Image, ImageInfo, Paint, PictureRecorder, Point, Rect, Sendable, Vertices};
+use skia_safe::{
+    images, scalar, surfaces, BlendMode, Canvas, ClipOp, Color, ConditionallySend, Data, Drawable,
+    Image, ImageInfo, Paint, PictureRecorder, Point, Rect, Sendable, Vertices,
+};
 
 #[derive(Eq, PartialEq)]
 enum PaintType {
@@ -45,8 +48,9 @@ impl Painter {
         textures_delta: TexturesDelta,
     ) {
         textures_delta.set.iter().for_each(|(id, image_delta)| {
+            // Newer egui delivers both regular textures and the font atlas as ImageData::Color
             let delta_image = match &image_delta.image {
-                ImageData::Color(color_image) => images::raster_from_data(
+                egui::epaint::ImageData::Color(color_image) => images::raster_from_data(
                     &ImageInfo::new_n32_premul(
                         skia_safe::ISize::new(
                             color_image.width() as i32,
@@ -65,24 +69,6 @@ impl Painter {
                     color_image.width() * 4,
                 )
                     .unwrap(),
-                ImageData::Font(font) => {
-                    let pixels = font.srgba_pixels(Some(1.0));
-
-                    images::raster_from_data(
-                        &ImageInfo::new_n32_premul(
-                            skia_safe::ISize::new(font.width() as i32, font.height() as i32),
-                            None,
-                        ),
-                        Data::new_copy(
-                            pixels
-                                .flat_map(|p| p.to_array())
-                                .collect::<Vec<_>>()
-                                .as_slice(),
-                        ),
-                        font.width() * 4,
-                    )
-                        .unwrap()
-                }
             };
 
             let image = match image_delta.pos {
@@ -91,8 +77,8 @@ impl Painter {
                     let old_image = self.paints.remove(id).unwrap().image;
 
                     let mut surface = surfaces::raster_n32_premul(skia_safe::ISize::new(
-                        old_image.width() as i32,
-                        old_image.height() as i32,
+                        old_image.width(),
+                        old_image.height(),
                     ))
                         .unwrap();
 
@@ -146,21 +132,23 @@ impl Painter {
                 .to_shader((tile_mode, tile_mode), sampling_options, &local_matrix)
                 .unwrap();
 
-            image.width();
-
             let mut paint = Paint::default();
             paint.set_shader(font_shader);
             paint.set_color(Color::WHITE);
+
+            // In newer egui, the font atlas uses TextureId::Managed(0).
+            let paint_type = if matches!(id, &TextureId::Managed(0)) {
+                PaintType::Font
+            } else {
+                PaintType::Image
+            };
 
             self.paints.insert(
                 *id,
                 PaintHandle {
                     paint,
                     image,
-                    paint_type: match image_delta.image {
-                        ImageData::Color(_) => PaintType::Image,
-                        ImageData::Font(_) => PaintType::Font,
-                    },
+                    paint_type,
                 },
             );
         });
@@ -193,9 +181,8 @@ impl Painter {
                         let mut texs = Vec::with_capacity(mesh.vertices.len());
                         let mut colors = Vec::with_capacity(mesh.vertices.len());
 
-                        mesh.vertices.iter().enumerate().for_each(|(_i, v)| {
-                            // Apparently vertices can be NaN and if they are NaN, nothing is rendered.
-                            // Replacing them with 0 works around this.
+                        mesh.vertices.iter().for_each(|v| {
+                            // Vertices can be NaN; replace with 0 to avoid dropping the draw.
                             // https://github.com/lucasmerlin/egui_skia/issues/4
                             let fixed_pos = if v.pos.x.is_nan() || v.pos.y.is_nan() {
                                 Pos2::new(0.0, 0.0)
@@ -208,14 +195,14 @@ impl Painter {
 
                             let c = v.color;
                             let c = Color::from_argb(c.a(), c.r(), c.g(), c.b());
-                            // Un-premultply color
-                            // This fixes some cases of the color-test
+                            // Un-premultiply color (helps with some color cases)
                             // https://github.com/lucasmerlin/egui_skia/issues/6
-                            // there might be a better solution though?
                             let mut cf = skia_safe::Color4f::from(c);
-                            cf.r /= cf.a;
-                            cf.g /= cf.a;
-                            cf.b /= cf.a;
+                            if cf.a != 0.0 {
+                                cf.r /= cf.a;
+                                cf.g /= cf.a;
+                                cf.b /= cf.a;
+                            }
                             colors.push(Color::from_argb(
                                 c.a(),
                                 (cf.r * 255.0) as u8,
@@ -223,26 +210,6 @@ impl Painter {
                                 (cf.b * 255.0) as u8,
                             ));
                         });
-
-                        // TODO: Use vertex builder
-                        // let mut vertex_builder = Builder::new(
-                        //     VertexMode::Triangles,
-                        //     mesh.vertices.len(),
-                        //     mesh.indices.len(),
-                        //     BuilderFlags::HAS_COLORS | BuilderFlags::HAS_TEX_COORDS,
-                        // );
-                        //
-                        // for (i, v) in mesh.vertices.iter().enumerate() {
-                        //     vertex_builder.positions()[i] = Point::new(v.pos.x, v.pos.y);
-                        //     vertex_builder.tex_coords().unwrap()[i] = Point::new(v.uv.x, v.uv.y);
-                        //     vertex_builder.colors().unwrap()[i] = Color::from_argb(
-                        //         v.color.a(),
-                        //         v.color.r(),
-                        //         v.color.g(),
-                        //         v.color.b(),
-                        //     );
-                        // }
-                        // let vertices = vertex_builder.detach();
 
                         let vertices = Vertices::new_copy(
                             VertexMode::Triangles,
@@ -260,15 +227,8 @@ impl Painter {
 
                         arc.clip_rect(skclip_rect, ClipOp::default(), true);
 
-                        // Egui use the uv coordinates 0,0 to get a white color when drawing vector graphics
-                        // 0,0 is always a white dot on the font texture
-                        // Unfortunately skia has a bug where it cannot get a color when the uv coordinates are equal
-                        // https://bugs.chromium.org/p/skia/issues/detail?id=13706
-                        // As a workaround, split_texture_meshes splits meshes that contain both 0,0 vertices, as
-                        // well as non-0,0 vertices into multiple meshes.
-                        // Here we check if the mesh is a font texture and if it's first uv has 0,0
-                        // If yes, we use a white paint instead of the texture shader paint
-
+                        // Egui samples UV 0,0 to get white from the font atlas.
+                        // Skia has a bug when UVs are identical; we split such meshes in cpu_fix.
                         let cpu_fix = if cfg!(feature = "cpu_fix")
                             && self.paints.get(&mesh.texture_id).unwrap().paint_type
                             == PaintType::Font
@@ -372,7 +332,8 @@ impl EguiSkiaPaintCallback {
         EguiSkiaPaintCallback {
             callback: Box::new(move |rect| {
                 let mut pr = PictureRecorder::new();
-                let canvas = pr.begin_recording(rect, None);
+                // skia-safe newer API: `use_bbh: bool` (use `false` when you don't need a BBH)
+                let canvas = pr.begin_recording(rect, false);
                 callback(canvas);
                 SyncSendableDrawable(
                     pr.finish_recording_as_drawable()
